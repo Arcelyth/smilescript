@@ -1,2 +1,2 @@
 (library
- (name smilescript))
+ (name smc_lib))

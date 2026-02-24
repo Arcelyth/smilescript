@@ -11,9 +11,10 @@
 
 (package
  (name smilescript)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "Smilescript interpreter")
+ (description "Smilescript interpreter")
  (depends ocaml)
+ (license "MIT")
  (tags
-  ("add topics" "to describe" your project)))
+  ("ocaml" "opam" "interpreter")))
 

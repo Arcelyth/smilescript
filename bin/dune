@@ -1,4 +1,4 @@
 (executable
  (public_name smilescript)
  (name main)
- (libraries smilescript))
+ (libraries smc_lib))
