@@ -1,6 +1,6 @@
 expression  : equality
 equality    : comparison ( ( "!=" | "==" ) comparsion )* ;  
-comparsion  : term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+comparison  : term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 term        : factor ( ( "-" | "+" ) factor )* ;
 factor      : unary ( ( "/" | "*" ) unary )* ;
 unary       : ("!" | "-") unary | primary ;
