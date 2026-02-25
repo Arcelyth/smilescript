@@ -4,7 +4,7 @@ open Error
 exception RuntimeError of Lexer.token * string
 
 let runtime_error token msg state = 
-  Printf.printf "%s\n[line %d]" msg token.Lexer.line;
+  Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
   state.had_runtime_err <- true
   
 (* value type in runtime *)
