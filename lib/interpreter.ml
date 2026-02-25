@@ -33,10 +33,17 @@ let is_equal a b =
   | (VBool b1, VBool b2) -> b1 = b2
   | _ -> false
 
-let rec evaluate = function
+let rec execute = function
+  | PrintStmt expr -> 
+      let v = evaluate_expr expr in
+      print_endline (string_of_value v)
+  | ExprStmt expr -> 
+      ignore (evaluate_expr expr)
+
+and evaluate_expr = function
   Binary (l, tk, r) -> 
-    let l_expr = evaluate l in
-    let r_expr = evaluate r in
+    let l_expr = evaluate_expr l in
+    let r_expr = evaluate_expr r in
     (match tk.kind with
     | Minus -> check_num_op tk l_expr r_expr (fun n1 n2 -> VNum (n1 -. n2))
     | Slash -> check_num_op tk l_expr r_expr (fun n1 n2 -> VNum (n1 /. n2))
@@ -55,7 +62,7 @@ let rec evaluate = function
     | _ -> failwith "Internal error: unexpected binary operator")
 
   | Unary (tk, e) -> 
-      let r = evaluate e in
+      let r = evaluate_expr e in
       (match tk.kind with 
       | Minus -> 
           (match r with
@@ -70,7 +77,9 @@ let rec evaluate = function
   | Literal Nil -> VNil
   | Literal _ -> failwith "Internal error: unexpected literal"
   | Grouping e -> 
-      evaluate e
+      evaluate_expr e
+
+  
 
 and is_truthy = function 
   | VNil | VBool false -> false
@@ -81,10 +90,9 @@ and check_num_op tk left right f =
   | VNum n1, VNum n2 -> f n1 n2
   | _ -> raise (RuntimeError (tk, "Operands must be numbers."))
 
-let interpret expression state = 
+let interpret stmts state = 
   try
-    let v = evaluate expression in
-    print_endline @@ string_of_value v
+    List.iter execute stmts
   with
     RuntimeError (tk, msg) -> runtime_error tk msg state
 

@@ -1,12 +1,17 @@
 open Lexer
 open Printf
 
-exception ParseError
+exception ParseError of token * string
 
 let parse_error token message state =
   let where = if token.kind = EOF then " at end" else " at '" ^ token.lexeme ^ "'" in
-  Error.report token.line where message state;
-  raise ParseError
+  Error.report token.line where message state
+
+let rec synchronize = function
+  | [] -> []
+  | {kind=Semicolon; _} :: rest -> rest
+  | {kind=Class|Fun|Var|For|If|While|Print|Return; _} :: _ as tks -> tks
+  | _ :: rest -> synchronize rest
 
 type expr = 
   | Binary of expr * token * expr
@@ -14,78 +19,113 @@ type expr =
   | Literal of token_type
   | Grouping of expr
 
-let rec expression tokens state = 
-  equality tokens state
+type stmt =
+  | PrintStmt of expr
+  | ExprStmt of expr
 
-and equality tokens state =
-  let expr, tokens = comparison tokens state in
+type program = stmt list
+
+let consume tokens expected_kind msg =
+  match tokens with
+  | {kind; _} :: rest when kind = expected_kind -> rest
+  | t :: _ -> raise (ParseError (t, msg))
+  | [] -> failwith "Unexpected EOF"
+
+let rec statement = function
+  {kind=Print; _} :: rest -> print_statement rest
+  | tks -> expr_statement tks
+ 
+and print_statement tokens =
+  let e, tokens = expression tokens in 
+  let tokens = consume tokens Semicolon "Expect ';' after value." in
+  PrintStmt e, tokens
+
+and expr_statement tokens = 
+  let e, tokens = expression tokens in 
+  let tokens = consume tokens Semicolon "Expect ';' after expression." in
+  ExprStmt e, tokens
+
+and expression tokens = 
+  equality tokens 
+
+and equality tokens  =
+  let expr, tokens = comparison tokens  in
   let rec loop expr = function
     | {kind=Bang_equal | Equal_equal; _ } as op :: rest -> 
-        let right, tokens = comparison rest state in 
+        let right, tokens = comparison rest  in 
         loop (Binary (expr, op, right)) tokens
     | rest -> expr, rest
   in
   loop expr tokens
 
-and comparison tokens state =
-  let expr, tokens = term tokens state in
+and comparison tokens  =
+  let expr, tokens = term tokens  in
   let rec loop expr = function 
     | {kind=Greater_equal | Greater | Less_equal | Less; _ } as op :: rest -> 
-        let right, tokens = term rest state in 
+        let right, tokens = term rest  in 
         loop (Binary (expr, op, right)) tokens
     | rest -> expr, rest
   in 
   loop expr tokens
 
-and term tokens state =
-  let expr, tokens = factor tokens state in
+and term tokens  =
+  let expr, tokens = factor tokens  in
   let rec loop expr = function 
     | {kind=Minus | Plus; _ } as op :: rest -> 
-        let right, tokens = factor rest state in 
+        let right, tokens = factor rest  in 
         loop (Binary (expr, op, right)) tokens
     | rest -> expr, rest
   in 
   loop expr tokens
 
-and factor tokens state =
-  let expr, tokens = unary tokens state in
+and factor tokens  =
+  let expr, tokens = unary tokens  in
   let rec loop expr = function 
     | {kind=Slash | Star; _ } as op :: rest -> 
-        let right, tokens = unary rest state in
+        let right, tokens = unary rest  in
         loop (Binary (expr, op, right)) tokens
     | rest -> expr, rest
   in 
   loop expr tokens
 
-and unary tokens state =
+and unary tokens  =
   match tokens with
   | {kind=Bang | Minus; _ } as op :: rest -> 
-      let right, tokens = unary rest state in
+      let right, tokens = unary rest  in
       Unary (op, right), tokens
-  | _ -> primary tokens state
+  | _ -> primary tokens 
 
-and primary tokens state =
+and primary tokens  =
   match tokens with
   | {kind=Number _; _} as t :: rest -> Literal t.kind, rest 
   | {kind=String _; _} as t :: rest -> Literal t.kind, rest 
   | {kind=True; _} as t :: rest -> Literal t.kind, rest 
   | {kind=False; _} as t :: rest -> Literal t.kind, rest 
   | {kind=Nil; _} as t :: rest -> Literal t.kind, rest 
-  | {kind=Left_paren; _} :: rest -> 
-      let expr, tokens = expression rest state in
+  | {kind=Left_paren; _} as tok :: rest -> 
+      let expr, tokens = expression rest in
       (match tokens with 
-       | {kind=Right_paren; _} :: rest -> Grouping expr, rest
-       | t :: _ -> parse_error t "Expect ')' after expression." state
-       | [] -> parse_error {kind=EOF; lexeme=""; line=0} "Expect ')' after expression." state)
-  | t :: _ -> parse_error t "Expect expression." state
-  | [] -> raise ParseError
+       | {kind=Right_paren; _} :: rest2 -> Grouping expr, rest2
+       | t :: _ -> raise (ParseError (t, "Expect ')' after expression."))
+       | [] -> raise (ParseError (tok, "Expect ')' after expression.")))
+  | t :: _ -> raise (ParseError (t, "Expect expression."))
+  | [] -> failwith "Unexpected end of input: no tokens to parse."
 
 let parse tokens state =
-  try 
-    let expr, _ = expression tokens state in
-    Some expr
-  with 
-  | ParseError -> None
+  let rec loop acc current_tokens =
+    match current_tokens with
+    | [] | {kind = EOF; _} :: _ -> List.rev acc
+    | _ ->
+        try
+          let stmt, next_tokens = statement current_tokens in
+          loop (stmt :: acc) next_tokens
+        with
+        | ParseError (tk, msg) ->
+            parse_error tk msg state;
+            (* enter panic mod *)
+            loop acc (synchronize current_tokens)
+  in
+  loop [] tokens
 
 let rec print_expr = function 
   | Binary (left, op, right) -> 
@@ -102,8 +142,7 @@ and string_of_literal = function
       let s = string_of_float n in
       if String.ends_with ~suffix:"." s then s ^ "0" else s
   | String s -> s
-  | True -> "true"
-  | False -> "false"
+  | Boolean b -> string_of_bool b
   | Nil -> "nil"
   | _ -> ""
 

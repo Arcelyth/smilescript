@@ -22,10 +22,8 @@ let read_file path =
 let run line state = 
   let scanner = { Lexer.source=line; start=0; current=0; line_num=1} in
   let tokens = Lexer.scan_tokens scanner state in
-  match Parser.parse tokens state with 
-  | Some expr -> 
-      Interpreter.interpret expr state
-  | None -> ()
+  let stmts = Parser.parse tokens state in
+  Interpreter.interpret stmts state
 
 let run_file path state = 
   let content = read_file path in
