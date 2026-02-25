@@ -1,7 +1,9 @@
 open Printf
 
 type state = 
-  { mutable had_err : bool; }
+  { mutable had_err : bool; 
+    mutable had_runtime_err : bool;
+  }
 
 let report line where message state = 
   eprintf "[line %d] Error %s: %s\n" line where message;

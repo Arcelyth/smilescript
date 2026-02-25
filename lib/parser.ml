@@ -1,4 +1,5 @@
 open Lexer
+open Printf
 
 exception ParseError
 
@@ -86,3 +87,26 @@ let parse tokens state =
   with 
   | ParseError -> None
 
+let rec print_expr = function 
+  | Binary (left, op, right) -> 
+      parenthesize op.lexeme [left; right]
+  | Unary (op, right) -> 
+      parenthesize op.lexeme [right]
+  | Grouping e -> 
+      parenthesize "group" [e] 
+  | Literal ty -> 
+      string_of_literal ty
+
+and string_of_literal = function 
+  | Number n -> 
+      let s = string_of_float n in
+      if String.ends_with ~suffix:"." s then s ^ "0" else s
+  | String s -> s
+  | True -> "true"
+  | False -> "false"
+  | Nil -> "nil"
+  | _ -> ""
+
+and parenthesize name exprs = 
+  let subs = List.map print_expr exprs in
+  sprintf "(%s %s)" name (String.concat " " subs)

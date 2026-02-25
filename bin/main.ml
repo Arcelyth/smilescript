@@ -20,15 +20,18 @@ let read_file path =
 
 
 let run line state = 
-  let scanner = { Lexer.source=line; start=0; current=0; line=1} in
+  let scanner = { Lexer.source=line; start=0; current=0; line_num=1} in
   let tokens = Lexer.scan_tokens scanner state in
   match Parser.parse tokens state with 
-  | Some _ -> ()
+  | Some expr -> 
+      Interpreter.interpret expr state
   | None -> ()
 
 let run_file path state = 
   let content = read_file path in
-  run content state
+  run content state; 
+  if state.had_err = true then exit(65);
+  if state.had_runtime_err = true then exit(70)
 
 let rec run_prompt state = 
   print_string "> ";
@@ -42,7 +45,7 @@ let rec run_prompt state =
 
 let () = 
   let args = Sys.argv in
-  let state = { Error.had_err = false } in
+  let state = { Error.had_err = false; had_runtime_err = false } in
   match Array.length args with 
   | 1 -> run_prompt state             
   | 2 -> run_file args.(1) state
