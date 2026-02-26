@@ -3,17 +3,32 @@ open Smc
 
 exception RuntimeError of Lexer.token * string
 
-let env_bind state key v = 
-  Hashtbl.replace state.env key v
+let rec env_exist env key =
+  if Hashtbl.mem env.values key then true
+  else match env.enclosing with
+       | Some parent -> env_exist parent key
+       | None -> false
 
-let env_get state key tk = 
-  match Hashtbl.find_opt state.env key with 
-  | Some v -> v
-  | None -> raise (RuntimeError (tk, "Undefinded variable '" ^ key ^ "'."))
+let env_define env name v =
+  Hashtbl.replace env.values name v
 
-let env_exist state key = 
-  Hashtbl.mem state.env key 
+let rec env_get env name tk =
+  if Hashtbl.mem env.values name then
+    Hashtbl.find env.values name
+  else
+    match env.enclosing with
+    | Some parent -> env_get parent name tk
+    | None -> raise (RuntimeError (tk, "Undefined variable '" ^ name ^ "'."))
 
+let rec env_bind env name v tk =
+  if Hashtbl.mem env.values name then
+    Hashtbl.replace env.values name v
+  else
+    match env.enclosing with
+    | Some parent -> env_bind parent name v tk
+    | None -> raise (RuntimeError (tk, "Undefined variable '" ^ name ^ "'."))
+
+  
 let runtime_error token msg state = 
   Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
   state.had_runtime_err <- true
@@ -37,7 +52,7 @@ let is_equal a b =
   | (VBool b1, VBool b2) -> b1 = b2
   | _ -> false
 
-let rec execute state = function
+let rec execute (state : state) = function
   | PrintStmt expr -> 
       let v = evaluate_expr expr state in
       print_endline (string_of_value v)
@@ -45,7 +60,20 @@ let rec execute state = function
       ignore (evaluate_expr expr state)
   | VarStmt (name, expr) ->
       let v = evaluate_expr expr state in 
-      ignore (env_bind state name v)
+      ignore (env_define state.cur_env name v )
+  | Block stmts -> 
+      let new_env = { values = Hashtbl.create 16; enclosing = Some state.cur_env } in
+      execute_block stmts new_env state
+     
+and execute_block stmts next_env state = 
+  let prev_env = state.cur_env in 
+  try 
+    state.cur_env <- next_env;
+    List.iter (execute state) stmts;
+    state.cur_env <- prev_env 
+  with e ->
+    state.cur_env <- prev_env; 
+    raise e
 
 and evaluate_expr expr state = match expr with
   Binary (l, tk, r) -> 
@@ -83,11 +111,11 @@ and evaluate_expr expr state = match expr with
   | Literal (Boolean b)-> VBool b
   | Literal Nil -> VNil
   | Literal _ -> failwith "Internal error: unexpected literal"
-  | Variable t -> env_get state t.lexeme t 
+  | Variable t -> env_get state.cur_env t.lexeme t 
   | Assign (t, value) -> 
       let v = evaluate_expr value state in 
-      if env_exist state t.lexeme then (
-        env_bind state t.lexeme v;
+      if env_exist state.cur_env t.lexeme then (
+        env_bind state.cur_env t.lexeme v t;
         v
       ) else (
         raise (RuntimeError (t, "Undefined variable '" ^ t.lexeme ^ "'."))

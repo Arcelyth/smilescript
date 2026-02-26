@@ -14,6 +14,7 @@ type stmt =
   | PrintStmt of expr
   | ExprStmt of expr
   | VarStmt of string * expr
+  | Block of stmt list
 
 type program = stmt list
 
@@ -55,8 +56,24 @@ and varDeclaration = function
 
 and statement = function
   {kind=Print; _} :: rest -> print_statement rest
+| {kind=Left_brace; _} :: rest -> 
+      let stmts, tokens_after_brace = block rest in
+      Block stmts, tokens_after_brace
   | tks -> expr_statement tks
- 
+
+and block tokens =
+  let rec loop acc tks = 
+    match tks with 
+    | {kind=Right_brace; _} :: rest -> 
+        (List.rev acc, rest)
+    | {kind=EOF; _} :: _ | [] -> 
+        raise (ParseError (List.hd tks, "Expect '}' after block."))
+    | _ -> 
+        let stmt, next_tks = declaration tks in
+        loop (stmt :: acc) next_tks
+  in
+  loop [] tokens
+
 and print_statement tokens =
   let e, tokens = expression tokens in 
   let tokens = consume tokens Semicolon "Expect ';' after value." in

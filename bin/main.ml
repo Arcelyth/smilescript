@@ -43,7 +43,7 @@ let rec run_prompt state =
 
 let () = 
   let args = Sys.argv in
-  let state = { Smc.had_err = false; had_runtime_err = false; env = Hashtbl.create 16 } in
+  let state = { Smc.had_err = false; had_runtime_err = false; cur_env = { values = Hashtbl.create 16; enclosing = None } } in
   match Array.length args with 
   | 1 -> run_prompt state             
   | 2 -> run_file args.(1) state

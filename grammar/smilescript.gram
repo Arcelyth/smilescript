@@ -3,7 +3,9 @@ declaration : varDecl
             | statment ;
 varDecl     : "var" IDENTIFIRE ("=" expression)? ";" ;
 statement   : exprStmt 
-            | printStmt ;
+            | printStmt
+            | block ;
+block       : "(" declaration* ")" ;
 exprStmt    : expression ";" ;
 printStmt   : "print" expression ";" ;
 expression  : assignment ;
