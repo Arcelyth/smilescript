@@ -1,11 +1,26 @@
 open Lexer
 open Printf
+open Smc
+
+type expr = 
+  | Binary of expr * token * expr
+  | Unary of token * expr
+  | Literal of token_type
+  | Grouping of expr
+  | Variable of token
+
+type stmt =
+  | PrintStmt of expr
+  | ExprStmt of expr
+  | VarStmt of string * expr
+
+type program = stmt list
 
 exception ParseError of token * string
 
 let parse_error token message state =
   let where = if token.kind = EOF then " at end" else " at '" ^ token.lexeme ^ "'" in
-  Error.report token.line where message state
+  report token.line where message state
 
 let rec synchronize = function
   | [] -> []
@@ -13,25 +28,31 @@ let rec synchronize = function
   | {kind=Class|Fun|Var|For|If|While|Print|Return; _} :: _ as tks -> tks
   | _ :: rest -> synchronize rest
 
-type expr = 
-  | Binary of expr * token * expr
-  | Unary of token * expr
-  | Literal of token_type
-  | Grouping of expr
-
-type stmt =
-  | PrintStmt of expr
-  | ExprStmt of expr
-
-type program = stmt list
-
 let consume tokens expected_kind msg =
   match tokens with
   | {kind; _} :: rest when kind = expected_kind -> rest
   | t :: _ -> raise (ParseError (t, msg))
   | [] -> failwith "Unexpected EOF"
 
-let rec statement = function
+
+let rec declaration = function 
+  {kind=Var; _} :: res -> varDeclaration res
+  | tks -> statement tks
+
+and varDeclaration = function 
+  {kind=Identifier name; _} :: tokens2 -> 
+    (match tokens2 with 
+    | {kind=Equal; _} :: rest -> 
+        let e, rest2 = expression rest in
+        let rest3 = consume rest2 Semicolon "Expect ';' after variable declaration." in
+        (VarStmt (name, e), rest3)
+    | _ -> 
+        let rest2 = consume tokens2 Semicolon "Expect ';' after variable declaration." in
+        (VarStmt (name, Literal Nil), rest2))
+  | t :: _ -> raise (ParseError (t, "Expect variable name"))
+  | [] -> failwith "Unexpected EOF"
+
+and statement = function
   {kind=Print; _} :: rest -> print_statement rest
   | tks -> expr_statement tks
  
@@ -102,6 +123,7 @@ and primary tokens  =
   | {kind=True; _} as t :: rest -> Literal t.kind, rest 
   | {kind=False; _} as t :: rest -> Literal t.kind, rest 
   | {kind=Nil; _} as t :: rest -> Literal t.kind, rest 
+  | {kind=Identifier _; _} as t :: rest -> Variable t, rest
   | {kind=Left_paren; _} as tok :: rest -> 
       let expr, tokens = expression rest in
       (match tokens with 
@@ -117,7 +139,7 @@ let parse tokens state =
     | [] | {kind = EOF; _} :: _ -> List.rev acc
     | _ ->
         try
-          let stmt, next_tokens = statement current_tokens in
+          let stmt, next_tokens = declaration current_tokens in
           loop (stmt :: acc) next_tokens
         with
         | ParseError (tk, msg) ->
@@ -136,6 +158,8 @@ let rec print_expr = function
       parenthesize "group" [e] 
   | Literal ty -> 
       string_of_literal ty
+  | Variable t -> 
+      sprintf "(var %s)" t.lexeme
 
 and string_of_literal = function 
   | Number n -> 

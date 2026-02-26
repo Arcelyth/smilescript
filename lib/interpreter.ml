@@ -1,18 +1,19 @@
 open Parser
-open Error
+open Smc
 
 exception RuntimeError of Lexer.token * string
+
+let env_bind state key v = 
+  Hashtbl.replace state.env key v
+
+let env_get state key tk = 
+  match Hashtbl.find_opt state.env key with 
+  | Some v -> v
+  | None -> raise (RuntimeError (tk, "Undefinded variable '" ^ key ^ "'."))
 
 let runtime_error token msg state = 
   Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
   state.had_runtime_err <- true
-  
-(* value type in runtime *)
-type value = 
-  | VNum of float
-  | VStr of string
-  | VBool of bool
-  | VNil
 
 let string_of_value = function
   | VNum n -> 
@@ -33,17 +34,20 @@ let is_equal a b =
   | (VBool b1, VBool b2) -> b1 = b2
   | _ -> false
 
-let rec execute = function
+let rec execute state = function
   | PrintStmt expr -> 
-      let v = evaluate_expr expr in
+      let v = evaluate_expr expr state in
       print_endline (string_of_value v)
   | ExprStmt expr -> 
-      ignore (evaluate_expr expr)
+      ignore (evaluate_expr expr state)
+  | VarStmt (name, expr) ->
+      let v = evaluate_expr expr state in 
+      ignore (env_bind state name v)
 
-and evaluate_expr = function
+and evaluate_expr expr state = match expr with
   Binary (l, tk, r) -> 
-    let l_expr = evaluate_expr l in
-    let r_expr = evaluate_expr r in
+    let l_expr = evaluate_expr l state in
+    let r_expr = evaluate_expr r state in
     (match tk.kind with
     | Minus -> check_num_op tk l_expr r_expr (fun n1 n2 -> VNum (n1 -. n2))
     | Slash -> check_num_op tk l_expr r_expr (fun n1 n2 -> VNum (n1 /. n2))
@@ -62,7 +66,7 @@ and evaluate_expr = function
     | _ -> failwith "Internal error: unexpected binary operator")
 
   | Unary (tk, e) -> 
-      let r = evaluate_expr e in
+      let r = evaluate_expr e state in
       (match tk.kind with 
       | Minus -> 
           (match r with
@@ -76,10 +80,9 @@ and evaluate_expr = function
   | Literal (Boolean b)-> VBool b
   | Literal Nil -> VNil
   | Literal _ -> failwith "Internal error: unexpected literal"
+  | Variable t -> env_get state t.lexeme t 
   | Grouping e -> 
-      evaluate_expr e
-
-  
+      evaluate_expr e state
 
 and is_truthy = function 
   | VNil | VBool false -> false
@@ -92,7 +95,7 @@ and check_num_op tk left right f =
 
 let interpret stmts state = 
   try
-    List.iter execute stmts
+    List.iter (execute state) stmts
   with
     RuntimeError (tk, msg) -> runtime_error tk msg state
 

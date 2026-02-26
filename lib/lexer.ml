@@ -1,5 +1,5 @@
 open Printf
-open Error
+open Smc
 
 exception SyntaxError of string
 

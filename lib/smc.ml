@@ -1,9 +1,18 @@
 open Printf
 
+(* value type in runtime *)
+type value = 
+  | VNum of float
+  | VStr of string
+  | VBool of bool
+  | VNil
+
 type state = 
   { mutable had_err : bool; 
     mutable had_runtime_err : bool;
+    mutable env : (string, value) Hashtbl.t;
   }
+
 
 let report line where message state = 
   printf "[line %d] Error %s: %s\n" line where message;
