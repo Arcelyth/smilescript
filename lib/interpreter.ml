@@ -11,6 +11,9 @@ let env_get state key tk =
   | Some v -> v
   | None -> raise (RuntimeError (tk, "Undefinded variable '" ^ key ^ "'."))
 
+let env_exist state key = 
+  Hashtbl.mem state.env key 
+
 let runtime_error token msg state = 
   Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
   state.had_runtime_err <- true
@@ -81,6 +84,14 @@ and evaluate_expr expr state = match expr with
   | Literal Nil -> VNil
   | Literal _ -> failwith "Internal error: unexpected literal"
   | Variable t -> env_get state t.lexeme t 
+  | Assign (t, value) -> 
+      let v = evaluate_expr value state in 
+      if env_exist state t.lexeme then (
+        env_bind state t.lexeme v;
+        v
+      ) else (
+        raise (RuntimeError (t, "Undefined variable '" ^ t.lexeme ^ "'."))
+      )
   | Grouping e -> 
       evaluate_expr e state
 

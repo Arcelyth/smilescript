@@ -3,6 +3,7 @@ open Printf
 open Smc
 
 type expr = 
+  | Assign of token * expr
   | Binary of expr * token * expr
   | Unary of token * expr
   | Literal of token_type
@@ -67,9 +68,22 @@ and expr_statement tokens =
   ExprStmt e, tokens
 
 and expression tokens = 
-  equality tokens 
+  assignment tokens 
 
-and equality tokens  =
+and assignment tokens = 
+  let e, tokens = equality tokens in 
+  match tokens with 
+  | {kind=Equal; _} as op :: tokens2 -> 
+      let v, rest = assignment tokens2 in 
+      (match e with 
+       | Variable t -> 
+           Assign (t, v), rest
+       | _ -> 
+           raise (ParseError (op, "Invalid assignment target.")))
+  | _ -> 
+      e, tokens
+
+and equality tokens =
   let expr, tokens = comparison tokens  in
   let rec loop expr = function
     | {kind=Bang_equal | Equal_equal; _ } as op :: rest -> 
@@ -79,7 +93,7 @@ and equality tokens  =
   in
   loop expr tokens
 
-and comparison tokens  =
+and comparison tokens =
   let expr, tokens = term tokens  in
   let rec loop expr = function 
     | {kind=Greater_equal | Greater | Less_equal | Less; _ } as op :: rest -> 
@@ -89,7 +103,7 @@ and comparison tokens  =
   in 
   loop expr tokens
 
-and term tokens  =
+and term tokens =
   let expr, tokens = factor tokens  in
   let rec loop expr = function 
     | {kind=Minus | Plus; _ } as op :: rest -> 
@@ -99,7 +113,7 @@ and term tokens  =
   in 
   loop expr tokens
 
-and factor tokens  =
+and factor tokens =
   let expr, tokens = unary tokens  in
   let rec loop expr = function 
     | {kind=Slash | Star; _ } as op :: rest -> 
@@ -109,14 +123,14 @@ and factor tokens  =
   in 
   loop expr tokens
 
-and unary tokens  =
+and unary tokens =
   match tokens with
   | {kind=Bang | Minus; _ } as op :: rest -> 
       let right, tokens = unary rest  in
       Unary (op, right), tokens
   | _ -> primary tokens 
 
-and primary tokens  =
+and primary tokens =
   match tokens with
   | {kind=Number _; _} as t :: rest -> Literal t.kind, rest 
   | {kind=String _; _} as t :: rest -> Literal t.kind, rest 
@@ -160,6 +174,8 @@ let rec print_expr = function
       string_of_literal ty
   | Variable t -> 
       sprintf "(var %s)" t.lexeme
+  | Assign (t, v) -> 
+      sprintf "(assign %s %s)" t.lexeme (print_expr v)
 
 and string_of_literal = function 
   | Number n -> 
