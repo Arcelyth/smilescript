@@ -3,8 +3,10 @@ declaration : varDecl
             | statment ;
 varDecl     : "var" IDENTIFIRE ("=" expression)? ";" ;
 statement   : exprStmt 
+            | ifStmt
             | printStmt
             | block ;
+ifStmt      : "if" "(" expression ")" statement ( "else" statement)? ;
 block       : "(" declaration* ")" ;
 exprStmt    : expression ";" ;
 printStmt   : "print" expression ";" ;

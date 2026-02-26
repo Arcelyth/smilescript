@@ -15,6 +15,7 @@ type stmt =
   | ExprStmt of expr
   | VarStmt of string * expr
   | Block of stmt list
+  | IfStmt of expr * stmt * stmt
 
 type program = stmt list
 
@@ -55,8 +56,9 @@ and varDeclaration = function
   | [] -> failwith "Unexpected EOF"
 
 and statement = function
-  {kind=Print; _} :: rest -> print_statement rest
-| {kind=Left_brace; _} :: rest -> 
+  {kind=If; _} :: rest -> if_statement rest
+  | {kind=Print; _} :: rest -> print_statement rest
+  | {kind=Left_brace; _} :: rest -> 
       let stmts, tokens_after_brace = block rest in
       Block stmts, tokens_after_brace
   | tks -> expr_statement tks
@@ -74,6 +76,17 @@ and block tokens =
   in
   loop [] tokens
 
+and if_statement tokens = 
+  let tokens2 = consume tokens Left_paren "Expect '(' after 'if'." in
+  let cond, rest = expression tokens2 in
+  let rest2 = consume rest Right_paren "Expect ')' after if condition." in
+  let then_br, rest3 = statement rest2 in
+  match rest3 with 
+  | {kind=Else; _} :: rest4 -> 
+      let else_br, rest5 = statement rest4 in
+      IfStmt (cond, then_br, else_br), rest5
+  | _ -> IfStmt (cond, then_br, ExprStmt (Literal Nil) ), rest3
+  
 and print_statement tokens =
   let e, tokens = expression tokens in 
   let tokens = consume tokens Semicolon "Expect ';' after value." in

@@ -53,6 +53,12 @@ let is_equal a b =
   | _ -> false
 
 let rec execute (state : state) = function
+  | IfStmt (cond, then_br, else_br) -> 
+      (match is_truthy @@ evaluate_expr cond state with 
+      | true -> 
+          execute state then_br 
+      | false -> 
+          execute state else_br)
   | PrintStmt expr -> 
       let v = evaluate_expr expr state in
       print_endline (string_of_value v)
