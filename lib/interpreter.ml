@@ -4,6 +4,7 @@ open Smc
 exception RuntimeError of Lexer.token * string
 exception BreakException
 exception ContinueException
+exception ReturnException of value
 
 let rec env_exist env key =
   if Hashtbl.mem env.values key then true
@@ -109,6 +110,29 @@ let rec execute (state : state) = function
       raise BreakException
   | ContinueStmt -> 
       raise ContinueException
+  | FuncStmt (name, params, body) ->
+      let closure = state.cur_env in 
+      let func_value = VCallable {
+        arity = List.length params;
+        call = (fun state args ->
+          let env = { 
+            values = Hashtbl.create (List.length params); 
+            enclosing = Some closure 
+          } in
+          List.iter2 (fun param_name arg_val ->
+            ignore (env_define env param_name arg_val)
+          ) params args;
+          try
+            execute_block body env state;
+            VNil 
+          with
+          | ReturnException value -> value 
+        );
+      } in
+      ignore (env_define state.cur_env name func_value)
+  | ReturnStmt (_, e) -> 
+      let value = evaluate_expr e state in
+      raise (ReturnException value)
 
 and execute_block stmts next_env state = 
   let prev_env = state.cur_env in 

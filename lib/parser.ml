@@ -19,6 +19,8 @@ type stmt =
   | Block of stmt list
   | IfStmt of expr * stmt * stmt
   | WhileStmt of expr * stmt * stmt option
+  | FuncStmt of string * string list * stmt list
+  | ReturnStmt of token * expr
   | BreakStmt
   | ContinueStmt
 
@@ -44,7 +46,8 @@ let consume tokens expected_kind msg =
 
 
 let rec declaration = function 
-  {kind=Var; _} :: res -> var_declaration res
+  {kind=Var; _} :: rest -> var_declaration rest
+  | {kind=Fun; _} :: rest -> func_declaration "function" rest
   | tks -> statement tks
 
 and var_declaration = function 
@@ -60,11 +63,39 @@ and var_declaration = function
   | t :: _ -> raise (ParseError (t, "Expect variable name"))
   | [] -> failwith "Unexpected EOF"
 
+and func_declaration kind = function
+  | {kind=Identifier name ; _} :: rest -> 
+      let tokens = consume rest Left_paren (sprintf "Expect '(' after %s name." kind) in
+      let rec parse_params acc tks =
+        match tks with
+        | {kind=Identifier id; _} as tk :: next_tks ->
+            let new_acc = id :: acc in
+            if List.length new_acc > 255 then
+              raise (ParseError (tk, "Can't have more than 255 arguments.")); 
+            (match next_tks with
+             | {kind=Comma; _} :: after_comma -> parse_params new_acc after_comma
+             | _ -> List.rev new_acc, next_tks)
+        | t :: _ -> raise (ParseError (t, "Expect parameter name."))
+        | [] -> failwith "Unexpected EOF"
+      in
+      let params, tokens2 = 
+        match tokens with
+        | {kind=Right_paren; _} :: _ -> [], tokens
+        | _ -> parse_params [] tokens
+      in
+      let tokens = consume tokens2 Right_paren "Expect ')' after parameters." in
+      let tokens = consume tokens Left_brace (sprintf "Expect '{' before %s body." kind) in
+      let body, tokens3 = block tokens in
+      FuncStmt (name, params, body),tokens3 
+  | t :: _ -> raise (ParseError (t, sprintf "Expect %s name." kind))
+  | [] -> failwith "Unexpected EOF"
+
 and statement = function
   {kind=If; _} :: rest -> if_statement rest
   | {kind=While; _} :: rest -> while_statement rest
   | {kind=For; _} :: rest -> for_statement rest
   | {kind=Print; _} :: rest -> print_statement rest
+  | {kind=Return; _} as tk :: rest -> return_statement tk rest
   | {kind=Break; _} :: rest -> 
       let rest2 = consume rest Semicolon "Expect ';' after 'break'." in
       BreakStmt, rest2
@@ -124,6 +155,14 @@ and while_statement tokens =
   let tokens4 = consume tokens3 Right_paren "Expect ')' after 'while'." in
   let body, tokens5 = statement tokens4 in
   WhileStmt (cond, body, None), tokens5
+
+and return_statement tk = function
+  {kind=Semicolon; _} :: rest -> 
+      ReturnStmt (tk, Literal Nil), rest
+  | tokens ->
+      let e, tokens2 = expression tokens in
+      let rest = consume tokens2 Semicolon "Expect ';' after return value." in
+      ReturnStmt (tk, e), rest
 
 and block tokens =
   let rec loop acc tks = 

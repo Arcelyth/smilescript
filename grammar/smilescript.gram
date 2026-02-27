@@ -1,7 +1,10 @@
 program         : declaration* EOF ;
 declaration     : varDecl
+                | funDecl
                 | statment ;
 varDecl         : "var" IDENTIFIRE ("=" expression)? ";" ;
+funDecl         : "fun" function ;
+function        : IDENTIFIER "(" parameters? ")" block ;
 statement       : exprStmt 
                 | ifStmt
                 | printStmt
@@ -9,6 +12,7 @@ statement       : exprStmt
                 | forStmt
                 | breakStmt 
                 | continueStmt
+                | returnStmt
                 | block ;
 whileStmt       : "while" "(" expression ")" statement ;
 forStmt         : "for" "(" (varDecl | exprStmt | ";" )
@@ -16,11 +20,13 @@ forStmt         : "for" "(" (varDecl | exprStmt | ";" )
                   expression? ")" statement ;
 breakStmt       : "break" ";" ;
 continueStmt    : "continue" ";" ;
+returnStmt      : "return" expression? ";" ;
 ifStmt          : "if" "(" expression ")" statement ( "else" statement)? ;
 block           : "(" declaration* ")" ;
 exprStmt        : expression ";" ;
 printStmt       : "print" expression ";" ;
 expression      : assignment ;
+parameters      : IDENTIFIER ( "," IDENTIFIER )* ;
 assignment      : IDENTIFIER "=" assignment 
                 | logic_or ;
 logic_or        : logic_and ("or" logic_and)* ;
