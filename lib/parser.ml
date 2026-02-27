@@ -5,6 +5,7 @@ open Smc
 type expr = 
   | Assign of token * expr
   | Binary of expr * token * expr
+  | Logical of expr * token * expr
   | Unary of token * expr
   | Literal of token_type
   | Grouping of expr
@@ -101,7 +102,7 @@ and expression tokens =
   assignment tokens 
 
 and assignment tokens = 
-  let e, tokens = equality tokens in 
+  let e, tokens = logic_or tokens in 
   match tokens with 
   | {kind=Equal; _} as op :: tokens2 -> 
       let v, rest = assignment tokens2 in 
@@ -112,6 +113,26 @@ and assignment tokens =
            raise (ParseError (op, "Invalid assignment target.")))
   | _ -> 
       e, tokens
+
+and logic_or tokens = 
+  let e, tokens = logic_and tokens in
+  let rec loop e = function 
+    | {kind=Or; _} as op :: rest -> 
+        let right, rest2 = logic_and rest in
+        loop (Logical (e, op, right)) rest2
+    | rest -> e, rest
+  in
+  loop e tokens
+    
+and logic_and tokens = 
+  let e, tokens = equality tokens in
+  let rec loop e = function 
+    | {kind=And; _} as op :: rest -> 
+        let right, rest2 = equality rest in
+        loop (Logical (e, op, right)) rest2
+    | rest -> e, rest
+  in
+  loop e tokens
 
 and equality tokens =
   let expr, tokens = comparison tokens  in
@@ -206,6 +227,9 @@ let rec print_expr = function
       sprintf "(var %s)" t.lexeme
   | Assign (t, v) -> 
       sprintf "(assign %s %s)" t.lexeme (print_expr v)
+  | Logical (left, op, right) -> 
+      parenthesize op.lexeme [left; right]
+
 
 and string_of_literal = function 
   | Number n -> 

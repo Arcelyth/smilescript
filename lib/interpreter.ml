@@ -102,6 +102,14 @@ and evaluate_expr expr state = match expr with
     | Equal_equal -> VBool (is_equal l_expr r_expr)
     | _ -> failwith "Internal error: unexpected binary operator")
 
+  | Logical (l_expr, op, r_expr) -> 
+      let left_v = evaluate_expr l_expr state in
+      (match op with 
+      | {kind=Or; _} -> 
+        if (is_truthy left_v) then left_v
+        else evaluate_expr r_expr state
+      | _ -> if (not (is_truthy left_v)) then left_v
+        else evaluate_expr r_expr state)
   | Unary (tk, e) -> 
       let r = evaluate_expr e state in
       (match tk.kind with 
