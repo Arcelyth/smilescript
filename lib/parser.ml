@@ -17,6 +17,7 @@ type stmt =
   | VarStmt of string * expr
   | Block of stmt list
   | IfStmt of expr * stmt * stmt
+  | WhileStmt of expr * stmt 
 
 type program = stmt list
 
@@ -58,11 +59,19 @@ and varDeclaration = function
 
 and statement = function
   {kind=If; _} :: rest -> if_statement rest
+  | {kind=While; _} :: rest -> while_statement rest
   | {kind=Print; _} :: rest -> print_statement rest
   | {kind=Left_brace; _} :: rest -> 
       let stmts, tokens_after_brace = block rest in
       Block stmts, tokens_after_brace
   | tks -> expr_statement tks
+
+and while_statement tokens = 
+  let tokens2 = consume tokens Left_paren "Expect '(' after 'while'." in
+  let cond, tokens3 = expression tokens2 in
+  let tokens4 = consume tokens3 Right_paren "Expect ')' after 'while'." in
+  let body, tokens5 = statement tokens4 in
+  WhileStmt (cond, body), tokens5
 
 and block tokens =
   let rec loop acc tks = 

@@ -59,6 +59,15 @@ let rec execute (state : state) = function
           execute state then_br 
       | false -> 
           execute state else_br)
+  | WhileStmt (cond, body) -> 
+      let rec loop () = 
+        match is_truthy (evaluate_expr cond state) with 
+        | true -> 
+            execute state body;
+            loop ()
+        | false -> ()
+      in
+      loop ()
   | PrintStmt expr -> 
       let v = evaluate_expr expr state in
       print_endline (string_of_value v)
@@ -110,6 +119,7 @@ and evaluate_expr expr state = match expr with
         else evaluate_expr r_expr state
       | _ -> if (not (is_truthy left_v)) then left_v
         else evaluate_expr r_expr state)
+
   | Unary (tk, e) -> 
       let r = evaluate_expr e state in
       (match tk.kind with 
@@ -132,8 +142,8 @@ and evaluate_expr expr state = match expr with
         env_bind state.cur_env t.lexeme v t;
         v
       ) else (
-        raise (RuntimeError (t, "Undefined variable '" ^ t.lexeme ^ "'."))
-      )
+        raise (RuntimeError (t, "Undefined variable '" ^ t.lexeme ^ "'.")))
+
   | Grouping e -> 
       evaluate_expr e state
 

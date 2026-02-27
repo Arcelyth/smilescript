@@ -5,7 +5,9 @@ varDecl     : "var" IDENTIFIRE ("=" expression)? ";" ;
 statement   : exprStmt 
             | ifStmt
             | printStmt
+            | whileStmt
             | block ;
+while       : "while" "(" expression ")" statement ;
 ifStmt      : "if" "(" expression ")" statement ( "else" statement)? ;
 block       : "(" declaration* ")" ;
 exprStmt    : expression ";" ;
