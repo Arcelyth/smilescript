@@ -2,6 +2,8 @@ open Parser
 open Smc
 
 exception RuntimeError of Lexer.token * string
+exception BreakException
+exception ContinueException
 
 let rec env_exist env key =
   if Hashtbl.mem env.values key then true
@@ -59,12 +61,19 @@ let rec execute (state : state) = function
           execute state then_br 
       | false -> 
           execute state else_br)
-  | WhileStmt (cond, body) -> 
+  | WhileStmt (cond, body, inc) -> 
       let rec loop () = 
         match is_truthy (evaluate_expr cond state) with 
         | true -> 
-            execute state body;
-            loop ()
+            (try 
+              execute state body;
+              Option.iter (execute state) inc;
+              loop ()
+            with 
+            | BreakException -> ()
+            | ContinueException -> 
+                Option.iter (execute state) inc;
+                loop ())
         | false -> ()
       in
       loop ()
@@ -79,6 +88,11 @@ let rec execute (state : state) = function
   | Block stmts -> 
       let new_env = { values = Hashtbl.create 16; enclosing = Some state.cur_env } in
       execute_block stmts new_env state
+  | BreakStmt -> 
+      raise BreakException
+  | ContinueStmt -> 
+      raise ContinueException
+
      
 and execute_block stmts next_env state = 
   let prev_env = state.cur_env in 

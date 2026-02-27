@@ -35,7 +35,8 @@ type token_type =
 
   (* keywords *)
   | And | Class | Else | False | Fun | For | If | Nil | Or
-  | Print | Return | Super | This | True | Var | While
+  | Print | Return | Super | This | True | Var | While 
+  | Break | Continue
 
   | EOF 
 
@@ -90,6 +91,8 @@ let string_of_token_type = function
   | True -> "TRUE"
   | Var -> "VAR"
   | While -> "WHILE"
+  | Break -> "BREAK"
+  | Continue -> "CONTINUE"
   
   | EOF -> "EOF"
 
@@ -205,6 +208,8 @@ let scan_tokens sc state =
         | "true" -> new_token @@ Boolean true
         | "var" -> new_token Var
         | "while" -> new_token While
+        | "break" -> new_token Break
+        | "continue" -> new_token Continue
         | text -> new_token @@ Identifier text
   in 
       

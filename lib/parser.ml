@@ -17,7 +17,9 @@ type stmt =
   | VarStmt of string * expr
   | Block of stmt list
   | IfStmt of expr * stmt * stmt
-  | WhileStmt of expr * stmt 
+  | WhileStmt of expr * stmt * stmt option
+  | BreakStmt
+  | ContinueStmt
 
 type program = stmt list
 
@@ -62,6 +64,12 @@ and statement = function
   | {kind=While; _} :: rest -> while_statement rest
   | {kind=For; _} :: rest -> for_statement rest
   | {kind=Print; _} :: rest -> print_statement rest
+  | {kind=Break; _} :: rest -> 
+      let rest2 = consume rest Semicolon "Expect ';' after 'break'." in
+      BreakStmt, rest2
+  | {kind=Continue; _} :: rest -> 
+      let rest2 = consume rest Semicolon "Expect ';' after 'continue'." in
+      ContinueStmt, rest2
   | {kind=Left_brace; _} :: rest -> 
       let stmts, tokens_after_brace = block rest in
       Block stmts, tokens_after_brace
@@ -97,24 +105,24 @@ and for_statement tokens =
   in
 
   let body, tokens = statement tokens in
-  let body = match increment with
-    | None -> body
-    | Some inc -> Block [body; ExprStmt inc]
+  let inc = match increment with
+    | None -> None
+    | Some inc -> Some (ExprStmt inc)
   in
 
-  let body = WhileStmt (condition, body) in
+  let body = WhileStmt (condition, body, inc) in
   let body = match init_stmt with
     | None -> body
     | Some init -> Block [init; body]
   in
-  (body, tokens)
+  body, tokens
 
 and while_statement tokens = 
   let tokens2 = consume tokens Left_paren "Expect '(' after 'while'." in
   let cond, tokens3 = expression tokens2 in
   let tokens4 = consume tokens3 Right_paren "Expect ')' after 'while'." in
   let body, tokens5 = statement tokens4 in
-  WhileStmt (cond, body), tokens5
+  WhileStmt (cond, body, None), tokens5
 
 and block tokens =
   let rec loop acc tks = 
