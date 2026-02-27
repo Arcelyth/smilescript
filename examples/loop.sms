@@ -3,4 +3,7 @@ while (a <= 10) {
     print "hi";
     a = a + 1;
 }
-print "done";
+
+for (var i = 1; i <= 10; i = i + 1) {
+    print "ok";
+} 

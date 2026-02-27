@@ -41,10 +41,10 @@ let consume tokens expected_kind msg =
 
 
 let rec declaration = function 
-  {kind=Var; _} :: res -> varDeclaration res
+  {kind=Var; _} :: res -> var_declaration res
   | tks -> statement tks
 
-and varDeclaration = function 
+and var_declaration = function 
   {kind=Identifier name; _} :: tokens2 -> 
     (match tokens2 with 
     | {kind=Equal; _} :: rest -> 
@@ -60,11 +60,54 @@ and varDeclaration = function
 and statement = function
   {kind=If; _} :: rest -> if_statement rest
   | {kind=While; _} :: rest -> while_statement rest
+  | {kind=For; _} :: rest -> for_statement rest
   | {kind=Print; _} :: rest -> print_statement rest
   | {kind=Left_brace; _} :: rest -> 
       let stmts, tokens_after_brace = block rest in
       Block stmts, tokens_after_brace
   | tks -> expr_statement tks
+
+and for_statement tokens =
+  let tokens = consume tokens Left_paren "Expect '(' after 'for'." in
+  let init_stmt, tokens =
+    match tokens with
+    | {kind=Semicolon; _} :: rest -> (None, rest)
+    | {kind=Var; _} :: rest -> 
+        let stmt, rest = var_declaration rest in (Some stmt, rest)
+    | _ -> 
+        let stmt, rest = expr_statement tokens in (Some stmt, rest)
+  in
+
+  let condition, tokens =
+    match tokens with
+    | {kind=Semicolon; _} :: rest -> (Literal (Boolean true), rest) 
+    | _ -> 
+        let expr, rest = expression tokens in
+        let rest = consume rest Semicolon "Expect ';' after loop condition." in
+        (expr, rest)
+  in
+
+  let increment, tokens =
+    match tokens with
+    | {kind=Right_paren; _} :: rest -> (None, rest)
+    | _ -> 
+        let expr, rest = expression tokens in
+        let rest = consume rest Right_paren "Expect ')' after for clauses." in
+        (Some expr, rest)
+  in
+
+  let body, tokens = statement tokens in
+  let body = match increment with
+    | None -> body
+    | Some inc -> Block [body; ExprStmt inc]
+  in
+
+  let body = WhileStmt (condition, body) in
+  let body = match init_stmt with
+    | None -> body
+    | Some init -> Block [init; body]
+  in
+  (body, tokens)
 
 and while_statement tokens = 
   let tokens2 = consume tokens Left_paren "Expect '(' after 'while'." in
