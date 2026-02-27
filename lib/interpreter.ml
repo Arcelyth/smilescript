@@ -30,6 +30,22 @@ let rec env_bind env name v tk =
     | Some parent -> env_bind parent name v tk
     | None -> raise (RuntimeError (tk, "Undefined variable '" ^ name ^ "'."))
 
+(* define native functions *)
+
+let native_functions = [
+  ("clock", 0, fun _ _ -> VNum (Unix.gettimeofday ()));
+  
+  ("type", 1, fun _ args -> 
+      match List.hd args with
+      | VNum _ -> VStr "number"
+      | VStr _ -> VStr "string"
+      | VBool _ -> VStr "boolean"
+      | VNil -> VStr "nil"
+      | VCallable _ -> VStr "function"
+  );
+]
+(* end of define native functions *)
+
   
 let runtime_error token msg state = 
   Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
@@ -44,6 +60,7 @@ let string_of_value = function
   | VStr s -> s
   | VBool b -> string_of_bool b
   | VNil -> "nil"
+  | VCallable _ -> "<fn>"
 
 let is_equal a b =
   match (a, b) with
@@ -93,7 +110,6 @@ let rec execute (state : state) = function
   | ContinueStmt -> 
       raise ContinueException
 
-     
 and execute_block stmts next_env state = 
   let prev_env = state.cur_env in 
   try 
@@ -160,6 +176,19 @@ and evaluate_expr expr state = match expr with
 
   | Grouping e -> 
       evaluate_expr e state
+  | Call (e, tk, args_exprs) -> 
+      let callee_value = evaluate_expr e state in
+      
+      let args_values = List.map (fun arg -> evaluate_expr arg state) args_exprs in
+      
+      match callee_value with
+      | VCallable callable ->
+          if List.length args_values <> callable.arity then
+            raise (RuntimeError (tk, Printf.sprintf "Expected %d arguments but got %d." callable.arity (List.length args_values)))
+          else
+            callable.call state args_values
+      | _ -> 
+          raise (RuntimeError (tk, "Can only call functions and classes."))
 
 and is_truthy = function 
   | VNil | VBool false -> false
@@ -170,12 +199,23 @@ and check_num_op tk left right f =
   | VNum n1, VNum n2 -> f n1 n2
   | _ -> raise (RuntimeError (tk, "Operands must be numbers."))
 
-let interpret stmts state = 
+let interpret stmts state =
+  List.iter (fun (name, arity, f) ->
+    let callable = {
+      arity = arity;
+      call = f;
+    } in
+    ignore (env_define state.cur_env name (VCallable callable))
+  ) native_functions;
+
   try
     List.iter (execute state) stmts
   with
-    RuntimeError (tk, msg) -> runtime_error tk msg state
-
+  | RuntimeError (tk, msg) -> runtime_error tk msg state
+  | BreakException -> 
+      runtime_error {kind=EOF; lexeme=""; line=0} "Unexpected 'break' outside of loop." state
+  | ContinueException -> 
+      runtime_error {kind=EOF; lexeme=""; line=0} "Unexpected 'continue' outside of loop." state
 
 
 

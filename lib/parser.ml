@@ -10,6 +10,7 @@ type expr =
   | Literal of token_type
   | Grouping of expr
   | Variable of token
+  | Call of expr * token * expr list
 
 type stmt =
   | PrintStmt of expr
@@ -239,7 +240,43 @@ and unary tokens =
   | {kind=Bang | Minus; _ } as op :: rest -> 
       let right, tokens = unary rest  in
       Unary (op, right), tokens
-  | _ -> primary tokens 
+  | _ -> call tokens 
+
+and call tokens =
+  let e, tokens2 = primary tokens in
+  
+  let rec loop callee current_tokens =
+    match current_tokens with
+    | {kind = Left_paren; _} :: rest -> 
+        let call_expr, tokens_after_call = finish_call callee rest in
+        loop call_expr tokens_after_call
+    | _ -> 
+        callee, current_tokens
+  in
+  loop e tokens2
+
+and finish_call callee tokens =
+  let rec parse_arguments acc tks =
+    let arg, rest = expression tks in
+    let new_acc = arg :: acc in
+    match rest with
+    | {kind = Comma; _} :: rest -> 
+        parse_arguments new_acc rest 
+    | _ -> 
+        List.rev new_acc, rest
+  in
+  match tokens with
+  | {kind = Right_paren; _} as paren :: rest ->
+      Call (callee, paren, []), rest
+  | _ ->
+      let args, rest = parse_arguments [] tokens in
+      match rest with
+      | {kind = Right_paren; _} as paren :: rest2 ->
+          if List.length args >= 255 then 
+            raise (ParseError (paren, "Can't have more than 255 arguments.")); 
+          Call (callee, paren, args), rest2
+      | t :: _ -> raise (ParseError (t, "Expect ')' after arguments."))
+      | [] -> failwith "Unexpected EOF"
 
 and primary tokens =
   match tokens with
@@ -289,7 +326,8 @@ let rec print_expr = function
       sprintf "(assign %s %s)" t.lexeme (print_expr v)
   | Logical (left, op, right) -> 
       parenthesize op.lexeme [left; right]
-
+  | Call (callee, _, args) -> 
+      parenthesize "call" (callee :: args)
 
 and string_of_literal = function 
   | Number n -> 
