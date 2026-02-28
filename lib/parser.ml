@@ -31,6 +31,7 @@ let consume tokens expected_kind msg =
 let rec declaration = function 
   {kind=Var; _} :: rest -> var_declaration rest
   | {kind=Fun; _} :: rest -> func_declaration "function" rest
+  | {kind=Class; _} :: rest -> class_declaration rest
   | tks -> statement tks
 
 and var_declaration = function 
@@ -71,6 +72,26 @@ and func_declaration kind = function
       let body, tokens3 = block tokens in
       FuncStmt (callee, params, body),tokens3 
   | t :: _ -> raise (ParseError (t, sprintf "Expect %s name." kind))
+  | [] -> failwith "Unexpected EOF"
+
+and class_declaration = function 
+  | {kind=Identifier _; _} as tk :: rest -> 
+      let rest = consume rest Left_brace "Expect '{' before class body." in
+      
+      let rec loop acc = function
+        | {kind=Right_brace; _} :: _ as rest2 -> List.rev acc, rest2
+        | {kind=EOF; _} :: _ | [] -> 
+            raise (ParseError (tk, "Expect '}' after class body."))
+        | rest2 -> 
+            let method_stmt, rest3 = func_declaration "method" rest2 in
+            loop (method_stmt :: acc) rest3
+      in 
+      
+      let methods, rest_after_loop = loop [] rest in
+      let rest_final = consume rest_after_loop Right_brace "Expect '}' after class body." in
+      Class (tk, methods), rest_final
+
+  | t :: _ -> raise (ParseError (t, "Expect class name."))
   | [] -> failwith "Unexpected EOF"
 
 and statement = function
@@ -190,9 +211,11 @@ and assignment tokens =
   | {kind=Equal; _} as op :: tokens2 -> 
       let v, rest = assignment tokens2 in 
       (match e with 
-       | Variable t -> 
-           Assign (t, v), rest
-       | _ -> 
+      | Variable t -> 
+          Assign (t, v), rest
+      | Get (e, tk) -> 
+          Set (e, tk, v), rest
+      | _ -> 
            raise (ParseError (op, "Invalid assignment target.")))
   | _ -> 
       e, tokens
@@ -266,12 +289,17 @@ and unary tokens =
 
 and call tokens =
   let e, tokens2 = primary tokens in
-  
   let rec loop callee current_tokens =
     match current_tokens with
     | {kind = Left_paren; _} :: rest -> 
         let call_expr, tokens_after_call = finish_call callee rest in
         loop call_expr tokens_after_call
+    | {kind = Dot; _} :: rest -> 
+        (match rest with 
+        | {kind=Identifier _; _} as tk :: rest2 -> 
+            loop (Get(callee, tk)) rest2
+        | t :: _ -> raise (ParseError (t, "Expect property name after '.'."))
+        | [] -> failwith "Unexpected EOF")
     | _ -> 
         callee, current_tokens
   in
@@ -350,6 +378,10 @@ let rec print_expr = function
       parenthesize op.lexeme [left; right]
   | Call (callee, _, args) -> 
       parenthesize "call" (callee :: args)
+  | Get (obj, tk) ->
+      sprintf "(get %s %s)" tk.lexeme (print_expr obj)
+  | Set (obj, tk, value) ->
+      sprintf "(set %s %s %s)" tk.lexeme (print_expr obj) (print_expr value) 
 
 and string_of_literal = function 
   | Number n -> 

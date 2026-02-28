@@ -54,6 +54,8 @@ type expr =
   | Grouping of expr
   | Variable of token
   | Call of expr * token * expr list
+  | Get of expr * token
+  | Set of expr * token * expr 
 
 type stmt =
   | PrintStmt of expr
@@ -64,6 +66,8 @@ type stmt =
   | WhileStmt of expr * stmt * stmt option
   | FuncStmt of token * token list * stmt list
   | ReturnStmt of token * expr
+  (* need to ensure all the stmt are FuncStmt *)
+  | Class of token * stmt list
   | BreakStmt
   | ContinueStmt
 
@@ -73,12 +77,24 @@ type value =
   | VStr of string
   | VBool of bool
   | VCallable of callable
+  | VClass of smc_class
+  | VInst of smc_instance
   | VNil
 
 and func_type = 
   | TypeFunc
   | TypeNone
+  | TypeMethod
 
+and smc_class = {
+  class_name : string;
+  methods : (string, callable) Hashtbl.t;
+}
+
+and smc_instance = {
+  klass : smc_class;
+  fields : (string, value) Hashtbl.t;
+}
 
 and state = { 
   mutable had_err : bool; 

@@ -76,11 +76,29 @@ let native_functions = [
       | VBool _ -> VStr "boolean"
       | VNil -> VStr "nil"
       | VCallable _ -> VStr "function"
+      | VClass _ -> VStr "class"
+      | VInst _ -> VStr "instance"
   );
 ]
 
 (* end of define native functions *)
-  
+
+(* class *)
+let class_find_method klass name =
+  Hashtbl.find_opt klass.methods name
+
+let instance_get instance name =
+  let name_str = name.lexeme in
+  if Hashtbl.mem instance.fields name_str then
+    Hashtbl.find instance.fields name_str
+  else match class_find_method instance.klass name_str with
+  | Some method_callable -> VCallable method_callable 
+  | None -> 
+      raise (RuntimeError (name, "Undefined property '" ^ name_str ^ "'."))
+
+let instance_set instance name value = 
+  Hashtbl.replace instance.fields name.lexeme value
+
 let runtime_error token msg state = 
   Printf.printf "%s\n[line %d]\n" msg token.line;
   state.had_runtime_err <- true
@@ -95,6 +113,8 @@ let string_of_value = function
   | VBool b -> string_of_bool b
   | VNil -> "nil"
   | VCallable _ -> "<fn>"
+  | VClass _ -> "<class>"
+  | VInst _ -> "<inst>"
 
 let is_equal a b =
   match (a, b) with
@@ -163,6 +183,36 @@ let rec execute (state : state) = function
         );
       } in
       ignore (env_define state.cur_env name.lexeme func_value)
+  
+  | Class (name, methods) -> 
+      let method_map = Hashtbl.create (List.length methods) in
+      
+      List.iter (fun m -> 
+        match m with
+        | FuncStmt (m_name, params, body) ->
+            let closure = state.cur_env in 
+            let func_callable = { 
+              arity = List.length params; 
+              call = (fun st args -> 
+                let env = { values = Hashtbl.create (List.length params); enclosing = Some closure } in
+                List.iter2 (fun p v -> ignore (env_define env p.lexeme v)) params args;
+                try
+                  execute_block body env st;
+                  VNil
+                with ReturnException v -> v
+              ) 
+            } in
+            Hashtbl.add method_map m_name.lexeme func_callable
+        | _ -> ()
+      ) methods;
+      
+      let smc_klass = { class_name = name.lexeme; methods = method_map } in
+      let class_callable = {
+        arity = 0;
+        call = (fun _ _ -> VInst { klass = smc_klass; fields = Hashtbl.create 8 })
+      } in
+      ignore (env_define state.cur_env name.lexeme (VCallable class_callable))
+
   | ReturnStmt (_, e) -> 
       let value = evaluate_expr e state in
       raise (ReturnException value)
@@ -233,14 +283,28 @@ and evaluate_expr expr state = match expr with
   | Call (e, tk, args_exprs) -> 
       let callee_value = evaluate_expr e state in
       let args_values = List.map (fun arg -> evaluate_expr arg state) args_exprs in
-      match callee_value with
+      (match callee_value with
       | VCallable callable ->
           if List.length args_values <> callable.arity then
             raise (RuntimeError (tk, Printf.sprintf "Expected %d arguments but got %d." callable.arity (List.length args_values)))
           else
             callable.call state args_values
       | _ -> 
-          raise (RuntimeError (tk, "Can only call functions and classes."))
+          raise (RuntimeError (tk, "Can only call functions and classes.")))
+  | Get (e, tk) -> 
+      let obj = evaluate_expr e state in
+      (match obj with
+      | VInst inst -> instance_get inst tk
+      | _ -> raise (RuntimeError (tk, "Only instances have properties.")))
+  | Set (e, tk, v) -> 
+      let obj = evaluate_expr e state in
+       (match obj with
+      | VInst inst -> 
+          let value = evaluate_expr v state in
+          instance_set inst tk value; 
+          value
+      | _ -> raise (RuntimeError (tk, "Only instances have fields.")))
+
 
 and is_truthy = function 
   | VNil | VBool false -> false

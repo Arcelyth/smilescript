@@ -67,6 +67,21 @@ let rec resolve_stmt state stmt =
       (match incr with 
       | Some e2 -> resolve_stmt state e2
       | None -> ())
+  | Class (name, methods) -> 
+      declare name state;
+      define name state.scopes;
+      List.iter (fun m -> 
+        match m with
+        | FuncStmt (_, params, body) ->
+            let enclosing_func = state.cur_func in
+            state.cur_func <- TypeMethod; 
+            begin_scope state.scopes;
+            List.iter (fun p -> declare p state; define p state.scopes) params;
+            resolve_stmts body state;
+            end_scope state.scopes;
+            state.cur_func <- enclosing_func
+        | _ -> ()
+      ) methods
   | _ -> ()
 
 and resolve_stmts stmts state = 
@@ -105,6 +120,11 @@ and resolve_expr state expr =
   | Call (callee, _, args) ->
       resolve_expr state callee;
       List.iter (resolve_expr state) args
+  | Get (e, _) -> 
+      resolve_expr state e
+  | Set (e, _, v) -> 
+      resolve_expr state e;
+      resolve_expr state v;
   | Logical (l, _ , r) -> 
       resolve_expr state l;
       resolve_expr state r
