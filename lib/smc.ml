@@ -75,12 +75,18 @@ type value =
   | VCallable of callable
   | VNil
 
+and func_type = 
+  | TypeFunc
+  | TypeNone
+
+
 and state = { 
   mutable had_err : bool; 
   mutable had_runtime_err : bool;
   mutable cur_env : env;
   globals : env;
   locals : (expr, int) Hashtbl.t;
+  mutable cur_func : func_type;
   mutable scopes : (string, bool) Hashtbl.t list ref
 }
 

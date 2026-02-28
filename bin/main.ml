@@ -34,12 +34,16 @@ let run line state is_repl =
       try
         let stmts = Parser.parse tokens state in
         Resolver.resolve_stmts stmts state;
-        Interpreter.interpret stmts state 
+        match state.had_err with
+        | true -> ()
+        | false -> Interpreter.interpret stmts state 
       with e -> eprintf "Error: %s\n" (Printexc.to_string e)
   else
     let stmts = Parser.parse tokens state in
     Resolver.resolve_stmts stmts state;
-    Interpreter.interpret stmts state
+    match state.had_err with
+    | true -> ()
+    | false -> Interpreter.interpret stmts state 
 
 let run_file path state = 
   let content = read_file path in
@@ -65,6 +69,7 @@ let () =
     had_runtime_err = false;
     cur_env = init_env;
     globals = init_env;
+    cur_func = TypeNone;
     locals = Hashtbl.create 256;
     scopes = ref [];
   }

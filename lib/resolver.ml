@@ -38,10 +38,13 @@ let rec resolve_stmt state stmt =
   | FuncStmt (name, params, body) -> 
       declare name state; 
       define name state.scopes;
+      let enclosing_func = state.cur_func in
+      state.cur_func <- TypeFunc;
       begin_scope state.scopes;
       List.iter (fun x -> declare x state; define x state.scopes) params;
       resolve_stmts body state;
-      end_scope state.scopes
+      end_scope state.scopes;
+      state.cur_func <- enclosing_func
   | ExprStmt e -> 
       resolve_expr state e 
   | IfStmt (cond, then_b, else_b) ->  
@@ -52,7 +55,9 @@ let rec resolve_stmt state stmt =
       | _ -> resolve_stmt state else_b)
   | PrintStmt e -> 
     resolve_expr state e
-  | ReturnStmt (_, e) -> 
+  | ReturnStmt (keyword, e) -> 
+      if state.cur_func = TypeNone then
+        err keyword.line "Can't return from top-level code." state;
       (match e with
       | Literal Nil -> ()
       | _ -> resolve_expr state e)
