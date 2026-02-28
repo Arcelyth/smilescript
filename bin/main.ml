@@ -26,17 +26,19 @@ let run line state is_repl =
     try
       let expr, rest = Parser.expression tokens in
       match rest with
-      | [{kind=Lexer.EOF; _}] | [] ->
+      | [{kind=Smc.EOF; _}] | [] ->
           let v = Interpreter.evaluate_expr expr state in
           print_endline (Interpreter.string_of_value v)
       | _ -> raise Exit
     with _ ->
       try
         let stmts = Parser.parse tokens state in
+        Resolver.resolve_stmts stmts state;
         Interpreter.interpret stmts state 
       with e -> eprintf "Error: %s\n" (Printexc.to_string e)
   else
     let stmts = Parser.parse tokens state in
+    Resolver.resolve_stmts stmts state;
     Interpreter.interpret stmts state
 
 let run_file path state = 
@@ -57,7 +59,16 @@ let rec run_prompt state =
 
 let () = 
   let args = Sys.argv in
-  let state = { Smc.had_err = false; had_runtime_err = false; cur_env = { values = Hashtbl.create 16; enclosing = None } } in
+  let init_env = { Smc.values = Hashtbl.create 32; enclosing = None } in
+  let state = {
+    Smc.had_err = false;
+    had_runtime_err = false;
+    cur_env = init_env;
+    globals = init_env;
+    locals = Hashtbl.create 256;
+    scopes = ref [];
+  }
+  in
   match Array.length args with 
   | 1 -> run_prompt state             
   | 2 -> run_file args.(1) state

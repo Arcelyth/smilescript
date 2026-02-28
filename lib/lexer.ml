@@ -3,49 +3,6 @@ open Smc
 
 exception SyntaxError of string
 
-type token_type = 
-  (* single-character tokens *)
-  | Left_paren   (* ( *)
-  | Right_paren  (* ) *)
-  | Left_brace   (* { *)
-  | Right_brace  (* } *)
-  | Comma        (* , *)
-  | Dot          (* . *)
-  | Minus        (* - *)
-  | Plus         (* + *)
-  | Semicolon    (* ; *)
-  | Slash        (* / *)
-  | Star         (* * *)
-
-  (* one or two character tokens *)
-  | Bang         (* ! *)
-  | Bang_equal   (* != *)
-  | Equal        (* = *)
-  | Equal_equal  (* == *)
-  | Greater      (* > *)
-  | Greater_equal(* >= *)
-  | Less         (* < *)
-  | Less_equal   (* <= *)
-
-  (* literals *)
-  | Identifier of string 
-  | String of string   
-  | Number of float       
-  | Boolean of bool
-
-  (* keywords *)
-  | And | Class | Else | False | Fun | For | If | Nil | Or
-  | Print | Return | Super | This | True | Var | While 
-  | Break | Continue
-
-  | EOF 
-
-
-type token = {
-  kind : token_type;
-  lexeme : string;  
-  line : int; 
-}
 
 let string_of_token_type = function
   | Left_paren -> "LEFT_PAREN"

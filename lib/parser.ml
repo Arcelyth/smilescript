@@ -1,28 +1,6 @@
-open Lexer
 open Printf
 open Smc
 
-type expr = 
-  | Assign of token * expr
-  | Binary of expr * token * expr
-  | Logical of expr * token * expr
-  | Unary of token * expr
-  | Literal of token_type
-  | Grouping of expr
-  | Variable of token
-  | Call of expr * token * expr list
-
-type stmt =
-  | PrintStmt of expr
-  | ExprStmt of expr
-  | VarStmt of string * expr
-  | Block of stmt list
-  | IfStmt of expr * stmt * stmt
-  | WhileStmt of expr * stmt * stmt option
-  | FuncStmt of string * string list * stmt list
-  | ReturnStmt of token * expr
-  | BreakStmt
-  | ContinueStmt
 
 type program = stmt list
 
@@ -32,11 +10,16 @@ let parse_error token message state =
   let where = if token.kind = EOF then " at end" else " at '" ^ token.lexeme ^ "'" in
   report token.line where message state
 
-let rec synchronize = function
+let synchronize = function
   | [] -> []
-  | {kind=Semicolon; _} :: rest -> rest
-  | {kind=Class|Fun|Var|For|If|While|Print|Return; _} :: _ as tks -> tks
-  | _ :: rest -> synchronize rest
+  | _ :: rest -> 
+      let rec seek = function
+        | [] -> []
+        | {kind=Semicolon; _} :: rest -> rest
+        | {kind=Class|Fun|Var|For|If|While|Print|Return; _} :: _ as tks -> tks
+        | _ :: rest -> seek rest
+      in
+      seek rest
 
 let consume tokens expected_kind msg =
   match tokens with
@@ -51,25 +34,25 @@ let rec declaration = function
   | tks -> statement tks
 
 and var_declaration = function 
-  {kind=Identifier name; _} :: tokens2 -> 
+  {kind=Identifier _; _} as v :: tokens2 -> 
     (match tokens2 with 
     | {kind=Equal; _} :: rest -> 
         let e, rest2 = expression rest in
         let rest3 = consume rest2 Semicolon "Expect ';' after variable declaration." in
-        (VarStmt (name, e), rest3)
+        (VarStmt (v, e), rest3)
     | _ -> 
         let rest2 = consume tokens2 Semicolon "Expect ';' after variable declaration." in
-        (VarStmt (name, Literal Nil), rest2))
+        (VarStmt (v, Literal Nil), rest2))
   | t :: _ -> raise (ParseError (t, "Expect variable name"))
   | [] -> failwith "Unexpected EOF"
 
 and func_declaration kind = function
-  | {kind=Identifier name ; _} :: rest -> 
+  | {kind=Identifier _ ; _} as callee :: rest -> 
       let tokens = consume rest Left_paren (sprintf "Expect '(' after %s name." kind) in
       let rec parse_params acc tks =
         match tks with
-        | {kind=Identifier id; _} as tk :: next_tks ->
-            let new_acc = id :: acc in
+        | {kind=Identifier _; _} as tk :: next_tks ->
+            let new_acc = tk :: acc in
             if List.length new_acc > 255 then
               raise (ParseError (tk, "Can't have more than 255 arguments.")); 
             (match next_tks with
@@ -86,7 +69,7 @@ and func_declaration kind = function
       let tokens = consume tokens2 Right_paren "Expect ')' after parameters." in
       let tokens = consume tokens Left_brace (sprintf "Expect '{' before %s body." kind) in
       let body, tokens3 = block tokens in
-      FuncStmt (name, params, body),tokens3 
+      FuncStmt (callee, params, body),tokens3 
   | t :: _ -> raise (ParseError (t, sprintf "Expect %s name." kind))
   | [] -> failwith "Unexpected EOF"
 

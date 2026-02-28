@@ -1,7 +1,6 @@
-open Parser
 open Smc
 
-exception RuntimeError of Lexer.token * string
+exception RuntimeError of token * string
 exception BreakException
 exception ContinueException
 exception ReturnException of value
@@ -31,6 +30,40 @@ let rec env_bind env name v tk =
     | Some parent -> env_bind parent name v tk
     | None -> raise (RuntimeError (tk, "Undefined variable '" ^ name ^ "'."))
 
+let rec ancestor distance env =
+  if distance = 0 then 
+    env
+  else 
+    match env.enclosing with
+    | Some e -> ancestor (distance - 1) e
+    | None -> 
+        failwith "Interpreter Error: Environment link broken at the expected distance."
+
+let get_at distance name env tk =
+  let target_env = ancestor distance env in
+  try
+    Hashtbl.find target_env.values name
+  with Not_found ->
+    raise (RuntimeError (tk, "Undefined variable '" ^ name ^ "' at distance " ^ (string_of_int distance) ^ "."))
+
+let lookup_var name_token expr state =
+  match Hashtbl.find_opt state.locals expr with
+  | Some distance ->
+      get_at distance name_token.lexeme state.cur_env name_token
+  | None ->
+      env_get state.globals name_token.lexeme name_token
+
+let assign_at distance name v env =
+  let target_env = ancestor distance env in
+  Hashtbl.replace target_env.values name v
+
+let lookup_assign name_token expr v state =
+  match Hashtbl.find_opt state.locals expr with
+  | Some distance ->
+      assign_at distance name_token.lexeme v state.cur_env
+  | None ->
+      env_bind state.globals name_token.lexeme v name_token
+
 (* define native functions *)
 
 let native_functions = [
@@ -45,11 +78,11 @@ let native_functions = [
       | VCallable _ -> VStr "function"
   );
 ]
-(* end of define native functions *)
 
+(* end of define native functions *)
   
 let runtime_error token msg state = 
-  Printf.printf "%s\n[line %d]\n" msg token.Lexer.line;
+  Printf.printf "%s\n[line %d]\n" msg token.line;
   state.had_runtime_err <- true
 
 let string_of_value = function
@@ -100,9 +133,9 @@ let rec execute (state : state) = function
       print_endline (string_of_value v)
   | ExprStmt expr -> 
       ignore (evaluate_expr expr state)
-  | VarStmt (name, expr) ->
+  | VarStmt (ident, expr) ->
       let v = evaluate_expr expr state in 
-      ignore (env_define state.cur_env name v )
+      ignore (env_define state.cur_env ident.lexeme v )
   | Block stmts -> 
       let new_env = { values = Hashtbl.create 16; enclosing = Some state.cur_env } in
       execute_block stmts new_env state
@@ -120,7 +153,7 @@ let rec execute (state : state) = function
             enclosing = Some closure 
           } in
           List.iter2 (fun param_name arg_val ->
-            ignore (env_define env param_name arg_val)
+            ignore (env_define env param_name.lexeme arg_val)
           ) params args;
           try
             execute_block body env state;
@@ -129,7 +162,7 @@ let rec execute (state : state) = function
           | ReturnException value -> value 
         );
       } in
-      ignore (env_define state.cur_env name func_value)
+      ignore (env_define state.cur_env name.lexeme func_value)
   | ReturnStmt (_, e) -> 
       let value = evaluate_expr e state in
       raise (ReturnException value)
@@ -189,22 +222,17 @@ and evaluate_expr expr state = match expr with
   | Literal (Boolean b)-> VBool b
   | Literal Nil -> VNil
   | Literal _ -> failwith "Internal error: unexpected literal"
-  | Variable t -> env_get state.cur_env t.lexeme t 
+  | Variable t -> 
+      lookup_var t expr state
   | Assign (t, value) -> 
       let v = evaluate_expr value state in 
-      if env_exist state.cur_env t.lexeme then (
-        env_bind state.cur_env t.lexeme v t;
-        v
-      ) else (
-        raise (RuntimeError (t, "Undefined variable '" ^ t.lexeme ^ "'.")))
-
+      ignore (lookup_assign t expr v state);
+      v
   | Grouping e -> 
       evaluate_expr e state
   | Call (e, tk, args_exprs) -> 
       let callee_value = evaluate_expr e state in
-      
       let args_values = List.map (fun arg -> evaluate_expr arg state) args_exprs in
-      
       match callee_value with
       | VCallable callable ->
           if List.length args_values <> callable.arity then

@@ -17,3 +17,12 @@ var c = "global c";
 print a;
 print b;
 print c;
+
+var d = "hi";
+{
+    print d;
+    var d = "hello";
+}
+
+
+
