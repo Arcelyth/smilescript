@@ -1,7 +1,6 @@
 open Printf
 open Smc
 
-
 type program = stmt list
 
 exception ParseError of token * string
@@ -322,7 +321,7 @@ and finish_call callee tokens =
       let args, rest = parse_arguments [] tokens in
       match rest with
       | {kind = Right_paren; _} as paren :: rest2 ->
-          if List.length args >= 255 then 
+          if List.length args > 255 then 
             raise (ParseError (paren, "Can't have more than 255 arguments.")); 
           Call (callee, paren, args), rest2
       | t :: _ -> raise (ParseError (t, "Expect ')' after arguments."))
@@ -336,6 +335,7 @@ and primary tokens =
   | {kind=False; _} as t :: rest -> Literal t.kind, rest 
   | {kind=Nil; _} as t :: rest -> Literal t.kind, rest 
   | {kind=Identifier _; _} as t :: rest -> Variable t, rest
+  | {kind=This; _} as t :: rest -> ThisExpr t, rest
   | {kind=Left_paren; _} as tok :: rest -> 
       let expr, tokens = expression rest in
       (match tokens with 
@@ -382,6 +382,8 @@ let rec print_expr = function
       sprintf "(get %s %s)" tk.lexeme (print_expr obj)
   | Set (obj, tk, value) ->
       sprintf "(set %s %s %s)" tk.lexeme (print_expr obj) (print_expr value) 
+  | ThisExpr tk -> 
+      sprintf "(this %s)" tk.lexeme 
 
 and string_of_literal = function 
   | Number n -> 

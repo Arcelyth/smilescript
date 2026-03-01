@@ -1,4 +1,5 @@
 open Smc
+open Printf
 
 exception RuntimeError of token * string
 exception BreakException
@@ -87,12 +88,23 @@ let native_functions = [
 let class_find_method klass name =
   Hashtbl.find_opt klass.methods name
 
+let bind_method instance = function
+  | SmcFunc (FuncStmt (name, params, body), closure) ->
+      let bound_env = { 
+        values = Hashtbl.create 1; 
+        enclosing = Some closure 
+      } in
+      env_define bound_env "this" (VInst instance);
+      VCallable (SmcFunc (FuncStmt (name, params, body), bound_env))
+  | _ -> failwith "Only functions can be bound."
+
 let instance_get instance name =
   let name_str = name.lexeme in
   if Hashtbl.mem instance.fields name_str then
     Hashtbl.find instance.fields name_str
   else match class_find_method instance.klass name_str with
-  | Some method_callable -> VCallable method_callable 
+  | Some method_callable -> 
+      bind_method instance method_callable
   | None -> 
       raise (RuntimeError (name, "Undefined property '" ^ name_str ^ "'."))
 
@@ -163,56 +175,21 @@ let rec execute (state : state) = function
       raise BreakException
   | ContinueStmt -> 
       raise ContinueException
-  | FuncStmt (name, params, body) ->
+  | FuncStmt (name, _, _) as stmt ->
       let closure = state.cur_env in 
-      let func_value = VCallable {
-        arity = List.length params;
-        call = (fun state args ->
-          let env = { 
-            values = Hashtbl.create (List.length params); 
-            enclosing = Some closure 
-          } in
-          List.iter2 (fun param_name arg_val ->
-            ignore (env_define env param_name.lexeme arg_val)
-          ) params args;
-          try
-            execute_block body env state;
-            VNil 
-          with
-          | ReturnException value -> value 
-        );
-      } in
-      ignore (env_define state.cur_env name.lexeme func_value)
-  
+      let func_value = VCallable (SmcFunc (stmt, closure)) in
+      ignore (env_define state.cur_env name.lexeme func_value)  
   | Class (name, methods) -> 
       let method_map = Hashtbl.create (List.length methods) in
-      
       List.iter (fun m -> 
         match m with
-        | FuncStmt (m_name, params, body) ->
-            let closure = state.cur_env in 
-            let func_callable = { 
-              arity = List.length params; 
-              call = (fun st args -> 
-                let env = { values = Hashtbl.create (List.length params); enclosing = Some closure } in
-                List.iter2 (fun p v -> ignore (env_define env p.lexeme v)) params args;
-                try
-                  execute_block body env st;
-                  VNil
-                with ReturnException v -> v
-              ) 
-            } in
-            Hashtbl.add method_map m_name.lexeme func_callable
+        | FuncStmt (m_name, _, _) -> 
+            Hashtbl.add method_map m_name.lexeme (SmcFunc (m, state.cur_env))
         | _ -> ()
       ) methods;
-      
       let smc_klass = { class_name = name.lexeme; methods = method_map } in
-      let class_callable = {
-        arity = 0;
-        call = (fun _ _ -> VInst { klass = smc_klass; fields = Hashtbl.create 8 })
-      } in
-      ignore (env_define state.cur_env name.lexeme (VCallable class_callable))
-
+      let class_val = VClass smc_klass in
+      ignore (env_define state.cur_env name.lexeme class_val)
   | ReturnStmt (_, e) -> 
       let value = evaluate_expr e state in
       raise (ReturnException value)
@@ -226,6 +203,24 @@ and execute_block stmts next_env state =
   with e ->
     state.cur_env <- prev_env; 
     raise e
+
+and call_val state tk args_values = function
+  | Native (arity, f) ->
+      if List.length args_values <> arity then 
+        raise (RuntimeError (tk, sprintf "Expected %d arguments but got %d." arity (List.length args_values)))
+      else f state args_values
+  | SmcFunc (FuncStmt (_, params, body), closure) ->
+      let arity = List.length params in
+      if List.length args_values <> arity then
+        raise (RuntimeError (tk, sprintf "Expected %d arguments but got %d." arity (List.length args_values)))
+      else
+        (let env = { values = Hashtbl.create arity; enclosing = Some closure } in
+        List.iter2 (fun p v -> Hashtbl.replace env.values p.lexeme v) params args_values;
+        try 
+          execute_block body env state; 
+          VNil 
+        with ReturnException v -> v)
+  | _ -> raise (RuntimeError (tk, "Can only call functions and classes."))
 
 and evaluate_expr expr state = match expr with
   Binary (l, tk, r) -> 
@@ -280,17 +275,17 @@ and evaluate_expr expr state = match expr with
       v
   | Grouping e -> 
       evaluate_expr e state
+
   | Call (e, tk, args_exprs) -> 
       let callee_value = evaluate_expr e state in
       let args_values = List.map (fun arg -> evaluate_expr arg state) args_exprs in
       (match callee_value with
-      | VCallable callable ->
-          if List.length args_values <> callable.arity then
-            raise (RuntimeError (tk, Printf.sprintf "Expected %d arguments but got %d." callable.arity (List.length args_values)))
-          else
-            callable.call state args_values
-      | _ -> 
-          raise (RuntimeError (tk, "Can only call functions and classes.")))
+      | VCallable c -> 
+          call_val state tk args_values c 
+      | VClass klass -> 
+          VInst { klass = klass; fields = Hashtbl.create 8 }
+      | _ -> raise (RuntimeError (tk, "Can only call functions and classes.")))
+
   | Get (e, tk) -> 
       let obj = evaluate_expr e state in
       (match obj with
@@ -304,7 +299,8 @@ and evaluate_expr expr state = match expr with
           instance_set inst tk value; 
           value
       | _ -> raise (RuntimeError (tk, "Only instances have fields.")))
-
+  | ThisExpr tk -> 
+      lookup_var tk expr state
 
 and is_truthy = function 
   | VNil | VBool false -> false
@@ -317,11 +313,7 @@ and check_num_op tk left right f =
 
 let interpret stmts state =
   List.iter (fun (name, arity, f) ->
-    let callable = {
-      arity = arity;
-      call = f;
-    } in
-    ignore (env_define state.cur_env name (VCallable callable))
+    ignore (env_define state.globals name (VCallable (Native (arity, f))))
   ) native_functions;
 
   try

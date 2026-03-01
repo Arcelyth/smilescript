@@ -34,4 +34,3 @@ var a = "global";
     showA();
 }
 
-return "omg";

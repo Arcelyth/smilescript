@@ -1,7 +1,5 @@
 open Smc
 
-let locals : (expr, int) Hashtbl.t = Hashtbl.create 256
-
 let begin_scope scopes =
   scopes := Hashtbl.create 8 :: !scopes
 
@@ -21,7 +19,7 @@ let define name scopes =
   match !scopes with
   | [] -> ()
   | top :: _ ->
-      Hashtbl.replace top name.lexeme true
+      Hashtbl.replace top name true
 
 let rec resolve_stmt state stmt = 
   match stmt with 
@@ -34,14 +32,14 @@ let rec resolve_stmt state stmt =
       (match init_expr with 
       | Literal Nil -> ()
       | _ -> resolve_expr state init_expr);
-      define ident state.scopes
+      define ident.lexeme state.scopes
   | FuncStmt (name, params, body) -> 
       declare name state; 
-      define name state.scopes;
+      define name.lexeme state.scopes;
       let enclosing_func = state.cur_func in
       state.cur_func <- TypeFunc;
       begin_scope state.scopes;
-      List.iter (fun x -> declare x state; define x state.scopes) params;
+      List.iter (fun x -> declare x state; define x.lexeme state.scopes) params;
       resolve_stmts body state;
       end_scope state.scopes;
       state.cur_func <- enclosing_func
@@ -68,20 +66,26 @@ let rec resolve_stmt state stmt =
       | Some e2 -> resolve_stmt state e2
       | None -> ())
   | Class (name, methods) -> 
+      let enclosing_class = state.cur_class in
+      state.cur_class <- TyClass;
       declare name state;
-      define name state.scopes;
+      define name.lexeme state.scopes;
+      begin_scope state.scopes;
+      define "this" state.scopes;
       List.iter (fun m -> 
         match m with
         | FuncStmt (_, params, body) ->
             let enclosing_func = state.cur_func in
             state.cur_func <- TypeMethod; 
             begin_scope state.scopes;
-            List.iter (fun p -> declare p state; define p state.scopes) params;
+            List.iter (fun p -> declare p state; define p.lexeme state.scopes) params;
             resolve_stmts body state;
             end_scope state.scopes;
             state.cur_func <- enclosing_func
         | _ -> ()
-      ) methods
+      ) methods;
+      end_scope state.scopes;
+      state.cur_class <- enclosing_class
   | _ -> ()
 
 and resolve_stmts stmts state = 
@@ -112,7 +116,11 @@ and resolve_expr state expr =
   | Assign (name_token, value_expr) ->
       resolve_expr state value_expr;
       resolve_local state expr name_token
-
+  | ThisExpr t -> 
+      (match state.cur_class with 
+      | TyClassNone -> 
+          err t.line "Can't read local variable in its own initializer." state
+      | _ -> resolve_local state expr t)
   | Binary (left, _, right) ->
       resolve_expr state left;
       resolve_expr state right

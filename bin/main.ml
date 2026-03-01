@@ -70,6 +70,7 @@ let () =
     cur_env = init_env;
     globals = init_env;
     cur_func = TypeNone;
+    cur_class = TyClassNone;
     locals = Hashtbl.create 256;
     scopes = ref [];
   }

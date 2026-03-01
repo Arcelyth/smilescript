@@ -56,6 +56,7 @@ type expr =
   | Call of expr * token * expr list
   | Get of expr * token
   | Set of expr * token * expr 
+  | ThisExpr of token
 
 type stmt =
   | PrintStmt of expr
@@ -86,6 +87,10 @@ and func_type =
   | TypeNone
   | TypeMethod
 
+and class_type = 
+  | TyClassNone
+  | TyClass
+
 and smc_class = {
   class_name : string;
   methods : (string, callable) Hashtbl.t;
@@ -103,6 +108,7 @@ and state = {
   globals : env;
   locals : (expr, int) Hashtbl.t;
   mutable cur_func : func_type;
+  mutable cur_class : class_type;
   mutable scopes : (string, bool) Hashtbl.t list ref
 }
 
@@ -111,11 +117,9 @@ and env = {
   enclosing : env option; 
 }
 
-and callable = {
-  arity : int;
-  call : state -> value list -> value;
-}
-
+and callable = 
+  | SmcFunc of stmt * env  
+  | Native of int * (state -> value list -> value)
 
 let report line where message state = 
   printf "[line %d] Error %s: %s\n" line where message;
