@@ -21,8 +21,8 @@ pub enum OpCode {
     Equal,
     Greater,
     Less,
-    Add, 
-    Subtract, 
+    Add,
+    Subtract,
     Multiply,
     Divide,
     Mod,
@@ -49,7 +49,7 @@ pub enum OpCode {
 #[derive(Debug, Clone)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
-    pub lines: Vec<usize>, 
+    pub lines: Vec<usize>,
     pub constants: Vec<Value>,
 }
 
@@ -58,10 +58,10 @@ impl Chunk {
         Self {
             code: Vec::new(),
             lines: Vec::new(),
-            constants: Vec::new()
+            constants: Vec::new(),
         }
     }
-    
+
     pub fn write(&mut self, op_code: OpCode, line: usize) -> usize {
         self.code.push(op_code);
         self.lines.push(line);

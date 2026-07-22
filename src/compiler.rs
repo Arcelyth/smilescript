@@ -42,7 +42,9 @@ impl<'c> Compiler<'c> {
         };
 
         let token = match fn_ty {
-            FunctionType::Method | FunctionType::Initializer => Token::new(TokenType::Error, "this", 0),
+            FunctionType::Method | FunctionType::Initializer => {
+                Token::new(TokenType::Error, "this", 0)
+            }
             _ => Token::new(TokenType::Error, "", 0),
         };
         n.locals.push(Local::new(token, 0));

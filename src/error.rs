@@ -1,5 +1,5 @@
 #[derive(Debug, Copy, Clone)]
-pub enum SmsError{
+pub enum SmsError {
     CompileError,
     RuntimeError,
 }

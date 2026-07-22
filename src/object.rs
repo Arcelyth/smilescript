@@ -49,9 +49,7 @@ impl Obj {
 
             Obj::BoundMethod(_) => base_size,
 
-            Obj::Array(arr) => {
-                base_size + arr.capacity() * size_of::<Value>() 
-            }
+            Obj::Array(arr) => base_size + arr.capacity() * size_of::<Value>(),
         }
     }
 }

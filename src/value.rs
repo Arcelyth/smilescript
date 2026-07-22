@@ -33,5 +33,3 @@ pub fn values_equal(a: &Value, b: &Value) -> bool {
         _ => false,
     }
 }
-
-

@@ -1,4 +1,4 @@
-mod common; 
+mod common;
 use test_generator::test_resources;
 
 #[test_resources("./tests/sms/*.sms")]

@@ -81,8 +81,8 @@ impl Disassembler {
             OpCode::Inherit => println!("OP_INHERIT"),
             OpCode::GetSuper(c) => self.const_instruction(chunk, "OP_INHERIT", *c),
             OpCode::Array(c) => self.const_instruction(chunk, "OP_ARRAY", *c),
-            OpCode::SetIndex => println!("OP_SET_INDEX"), 
-            OpCode::GetIndex => println!("OP_GET_INDEX"), 
+            OpCode::SetIndex => println!("OP_SET_INDEX"),
+            OpCode::GetIndex => println!("OP_GET_INDEX"),
             _ => println!("Unknown opcode: {:?}", code),
         }
     }
@@ -107,8 +107,7 @@ impl Disassembler {
         println!("{:<16} {:4} -> {}", name, pos, jump_to);
     }
 
-    pub fn invoke_instruction(&self, name: &str, info:(u8, u8)) {
+    pub fn invoke_instruction(&self, name: &str, info: (u8, u8)) {
         println!("{:<16} ({} args) {:4}", name, info.1, info.0);
     }
-
 }
